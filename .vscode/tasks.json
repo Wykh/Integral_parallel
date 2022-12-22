@@ -6,6 +6,7 @@
 			"label": "C/C++: g++ build active file",
 			"command": "/usr/bin/g++",
 			"args": [
+				"-fopenmp",
 				"-fconcepts",
 				"-fdiagnostics-color=always",
 				"-g",
@@ -26,5 +27,4 @@
 			},
 			"detail": "compiler: /usr/bin/g++"
 		}
-	]
 }

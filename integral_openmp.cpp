@@ -27,9 +27,10 @@ int main()
     auto start = clock();
     auto result = calc_integral_with_accuracy(a, b, accuracy, init_segments_count);
     auto end = clock();
-
-    std::cout << "result: " << std::fixed << std::setprecision(8) << result << std::endl;
-    std::cout << "time: " << std::setprecision(8) << (double)(end - start) / CLOCKS_PER_SEC << " sec" << std::endl;
+    std::cout << std::fixed;
+    std::cout << std::setprecision(12);
+    std::cout << "result: " << result << std::endl;
+    std::cout << "time: " << (double)(end - start) / CLOCKS_PER_SEC << " sec" << std::endl;
 }
 
 double func(auto x)
