@@ -2,12 +2,16 @@
 #include <iomanip>
 #include <time.h>
 #include <math.h>
+#include <chrono>
+#include <unistd.h>
+#include <omp.h>
 
 #define DO_PRINT false
 
 double func(auto x);
 
 double calc_integral(auto seg_count, auto a, auto b);
+double calc_integral_with_accuracy(auto a, auto b, auto accuracy, auto init_segments_count);
 double calc_runge_error(auto sum_prev_step, auto sum_cur_step);
 
 void print_step(auto iter, auto seg_count, auto sum, auto err_runge);
@@ -15,22 +19,19 @@ void print_step_winner(auto iter, auto seg_count, auto sum, auto err_runge);
 void print_header();
 void print_footer();
 
-double calc_integral_with_accuracy(auto a, auto b, auto accuracy, auto init_segments_count);
-
 int main()
 {
     auto a = 1.0;
     auto b = 2.0;
-    auto accuracy = 1E-10;
-    auto init_segments_count = 6;
+    auto accuracy = 1E-50;
+    auto init_segments_count = 100000;
 
-    auto start = clock();
+    auto start = std::chrono::high_resolution_clock::now();
     auto result = calc_integral_with_accuracy(a, b, accuracy, init_segments_count);
-    auto end = clock();
-    std::cout << std::fixed;
-    std::cout << std::setprecision(12);
-    std::cout << "result: " << result << std::endl;
-    std::cout << "time: " << (double)(end - start) / CLOCKS_PER_SEC << " sec" << std::endl;
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::cout << "result: " << std::fixed << std::setprecision(30) << result << std::endl;
+    std::cout << "time: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << " microseconds" << std::endl;
 }
 
 double func(auto x)
@@ -48,6 +49,14 @@ double calc_integral(auto seg_count, auto a, auto b)
     auto step_size = (b - a) / seg_count;
     auto sum = 0.0;
 
+    // for (auto i = 0; i < seg_count; i++)
+    // {
+    //     auto x_left = a + i * step_size;
+    //     auto x_right = a + (i + 1) * step_size;
+    //     sum += ((x_right - x_left) / 6) * (func(x_left) + 4 * func((x_left + x_right) / 2) + func(x_right));
+    // }
+    // user openmp
+    #pragma omp parallel for reduction(+:sum)
     for (auto i = 0; i < seg_count; i++)
     {
         auto x_left = a + i * step_size;

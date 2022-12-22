@@ -1,3 +1,6 @@
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
 #include <iostream>
 #include <iomanip>
 #include <time.h>
@@ -33,28 +36,27 @@ int main()
     std::cout << "time: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << " microseconds" << std::endl;
 }
 
-double func(auto x)
-{
-    return 2 - x + cos(x) - log10(1 + x);
-}
-
 double calc_runge_error(auto sum_prev_step, auto sum_cur_step)
 {
     return abs(sum_cur_step - sum_prev_step);
 }
 
-double calc_integral(auto seg_count, auto a, auto b)
+//device func
+__device__ double func_device(double x)
 {
-    auto step_size = (b - a) / seg_count;
-    auto sum = 0.0;
+    return 2 - x + cos(x) - log10(1 + x);
+}
 
-    for (auto i = 0; i < seg_count; i++)
+// cuda kernal calc_integral
+__global__ void calc_integral_kernel(double *a_d, double *b_d, double *step_size_d, double *sum_d, int seg_count)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < seg_count)
     {
-        auto x_left = a + i * step_size;
-        auto x_right = a + (i + 1) * step_size;
-        sum += ((x_right - x_left) / 6) * (func(x_left) + 4 * func((x_left + x_right) / 2) + func(x_right));
+        double x_left = a_d[0] + i * step_size_d[0];
+        double x_right = a_d[0] + (i + 1) * step_size_d[0];
+        sum_d[i] = ((x_right - x_left) / 6) * (func_device(x_left) + 4 * func_device((x_left + x_right) / 2) + func_device(x_right));
     }
-    return sum;
 }
 
 double calc_integral_with_accuracy(auto a, auto b, auto accuracy, auto init_segments_count)
@@ -65,13 +67,64 @@ double calc_integral_with_accuracy(auto a, auto b, auto accuracy, auto init_segm
     auto seg_count = init_segments_count;
     auto iter = 1;
 
-    auto sum_prev_step = calc_integral(seg_count, a, b);
+    // allocate memory on host
+    double *a_h = (double *)malloc(sizeof(double));
+    double *b_h = (double *)malloc(sizeof(double));
+    double *step_size_h = (double *)malloc(sizeof(double));
+    double *sum_h = (double *)malloc(sizeof(double) * seg_count);
+
+    // allocate memory on device
+    double *a_d;
+    double *b_d;
+    double *step_size_d;
+    double *sum_d;
+    cudaMalloc((void **)&a_d, sizeof(double));
+    cudaMalloc((void **)&b_d, sizeof(double));
+    cudaMalloc((void **)&step_size_d, sizeof(double));
+    cudaMalloc((void **)&sum_d, sizeof(double) * seg_count);
+
+    // copy data from host to device
+    a_h[0] = a;
+    b_h[0] = b;
+    cudaMemcpy(a_d, a_h, sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(b_d, b_h, sizeof(double), cudaMemcpyHostToDevice);
+
+    // calculate step size
+    step_size_h[0] = (b - a) / seg_count;
+    cudaMemcpy(step_size_d, step_size_h, sizeof(double), cudaMemcpyHostToDevice);
+
+    // calculate sum
+    calc_integral_kernel<<<(seg_count + 255) / 256, 256>>>(a_d, b_d, step_size_d, sum_d, seg_count);
+    cudaMemcpy(sum_h, sum_d, sizeof(double) * seg_count, cudaMemcpyDeviceToHost);
+
+    // sum up the result
+    auto sum_prev_step = 0.0;
+    for (auto i = 0; i < seg_count; i++)
+    {
+        sum_prev_step += sum_h[i];
+    }
+
     seg_count += 2;
 
     while (err_runge > accuracy)
     {
         print_step(iter, seg_count, sum_prev_step, err_runge);
-        auto sum_cur_step = calc_integral(seg_count, a, b);
+
+        // calculate step size
+        step_size_h[0] = (b - a) / seg_count;
+        cudaMemcpy(step_size_d, step_size_h, sizeof(double), cudaMemcpyHostToDevice);
+
+        // calculate sum
+        calc_integral_kernel<<<(seg_count + 255) / 256, 256>>>(a_d, b_d, step_size_d, sum_d, seg_count);
+        cudaMemcpy(sum_h, sum_d, sizeof(double) * seg_count, cudaMemcpyDeviceToHost);
+
+        // sum up the result
+        auto sum_cur_step = 0.0;
+        for (auto i = 0; i < seg_count; i++)
+        {
+            sum_cur_step += sum_h[i];
+        }
+
         seg_count += 2;
         err_runge = calc_runge_error(sum_prev_step, sum_cur_step);
         sum_prev_step = sum_cur_step;
@@ -80,6 +133,19 @@ double calc_integral_with_accuracy(auto a, auto b, auto accuracy, auto init_segm
 
     print_step_winner(iter, seg_count, sum_prev_step, err_runge);
     print_footer();
+
+    // free memory on device
+    cudaFree(a_d);
+    cudaFree(b_d);
+    cudaFree(step_size_d);
+    cudaFree(sum_d);
+
+    // free memory on host
+    free(a_h);
+    free(b_h);
+    free(step_size_h);
+    free(sum_h);
+
     return sum_prev_step;
 }
 
