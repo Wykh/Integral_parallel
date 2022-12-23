@@ -44,6 +44,29 @@
                 "reveal": "silent"
             },
             "problemMatcher": "$nvcc"
+        },
+		{
+            "type": "shell",
+            "label": "C/C++: mpic++ build active file",
+            "command": "mpic++",
+            "args": [
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}",
+                "-std=c++20"
+            ],
+            "options": {
+                "cwd": "/usr/bin"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Generated task by Debugger"
         }
 
 	]
